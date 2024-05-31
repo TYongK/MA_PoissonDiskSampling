@@ -14,4 +14,5 @@ Poisson Sampling on a Poygon
 
 Poisson Sampling Mesh Weighted by Color
 
-![image](https://github.com/TYongK/MA_PoissonSampling/assets/93954052/96a9830d-7696-4871-beb0-7123d683a317)
+![image](https://github.com/TYongK/MA_PoissonSampling/assets/93954052/a9a57942-982a-4512-8521-2b1d7ad893b1)
+
