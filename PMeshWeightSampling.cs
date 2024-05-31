@@ -1,5 +1,65 @@
-private void RunScript(double radi, Mesh meshIn, double radi_Max_0t1, double radi_Min_0t1, ref object pResult, ref object activeP, ref object A)
+using System;
+using System.Collections;
+using System.Collections.Generic;
+
+using Rhino;
+using Rhino.Geometry;
+
+using Grasshopper;
+using Grasshopper.Kernel;
+using Grasshopper.Kernel.Data;
+using Grasshopper.Kernel.Types;
+
+using System.Drawing;
+
+/// <summary>
+/// This class will be instantiated on demand by the Script component.
+/// </summary>
+public class Script_Instance : GH_ScriptInstance
+{
+#region Utility functions
+  /// <summary>Print a String to the [Out] Parameter of the Script component.</summary>
+  /// <param name="text">String to print.</param>
+  private void Print(string text) { /* Implementation hidden. */ }
+  /// <summary>Print a formatted String to the [Out] Parameter of the Script component.</summary>
+  /// <param name="format">String format.</param>
+  /// <param name="args">Formatting parameters.</param>
+  private void Print(string format, params object[] args) { /* Implementation hidden. */ }
+  /// <summary>Print useful information about an object instance to the [Out] Parameter of the Script component. </summary>
+  /// <param name="obj">Object instance to parse.</param>
+  private void Reflect(object obj) { /* Implementation hidden. */ }
+  /// <summary>Print the signatures of all the overloads of a specific method to the [Out] Parameter of the Script component. </summary>
+  /// <param name="obj">Object instance to parse.</param>
+  private void Reflect(object obj, string method_name) { /* Implementation hidden. */ }
+#endregion
+
+#region Members
+  /// <summary>Gets the current Rhino document.</summary>
+  private readonly RhinoDoc RhinoDocument;
+  /// <summary>Gets the Grasshopper document that owns this script.</summary>
+  private readonly GH_Document GrasshopperDocument;
+  /// <summary>Gets the Grasshopper script component that owns this script.</summary>
+  private readonly IGH_Component Component;
+  /// <summary>
+  /// Gets the current iteration count. The first call to RunScript() is associated with Iteration==0.
+  /// Any subsequent call within the same solution will increment the Iteration count.
+  /// </summary>
+  private readonly int Iteration;
+#endregion
+
+  /// <summary>
+  /// This procedure contains the user code. Input parameters are provided as regular arguments,
+  /// Output parameters as ref arguments. You don't have to assign output parameters,
+  /// they will have a default value.
+  /// </summary>
+  private void RunScript(Mesh meshIn, double radi, double radi_Max_0t1, double radi_Min_0t1, ref object A, ref object pResult)
   {
+
+    if(meshIn == null || radi == 0 || radi_Max_0t1 == 0 || radi_Min_0t1 == 0)
+    {
+      A = "return";
+      return;
+    }
 
     List<Point3d> pointResulXY = new List<Point3d>();
     List<Point3d> pointResulYZ = new List<Point3d>();
@@ -74,11 +134,12 @@ private void RunScript(double radi, Mesh meshIn, double radi_Max_0t1, double rad
     }
 
     pResult = pointResulFinal;
-    activeP = pointResulXZ;
     A = meshIn;
+
   }
 
   // <Custom additional code> 
+
   public void PoissonDisk3D_XY(Mesh meshInput, double radi, int iterTest, double maxMult, double minMult, out List<Point3d> pOut, out int ACountOut, out List<Point3d> PTTT)
   {
 
@@ -111,83 +172,79 @@ private void RunScript(double radi, Mesh meshIn, double radi_Max_0t1, double rad
     double parmIni = Rhino.Geometry.Intersect.Intersection.MeshRay(meshInput, rayIni);
 
     activePoints.Add(meshInput.Vertices.Point3dAt(randIndexMeshV));
-    allPoints.Add(meshInput.Vertices.Point3dAt(randIndexMeshV));
+    //allPoints.Add(meshInput.Vertices.Point3dAt(randIndexMeshV));
 
-    int iterTemp = 0;
-
-    while(activePoints.Count > 0 && iterTemp < 5000)
+    while(activePoints.Count > 0)
     {
-      iterTemp++;
 
+      int randIndex = (int) Math.Floor(ran.NextDouble() * activePoints.Count);
+      int pointBadCount = 0;
 
-      if( activePoints.Count > 0)
+      for(int t = 0; t < k; t++)
       {
+        ////Get Mesh Color for Point Gen
+        MeshPoint mPTemp = meshInput.ClosestMeshPoint(activePoints[randIndex], 0.0);
+        Color mColor = meshInput.ColorAt(mPTemp);
+        double bColor = Convert.ToDouble(Convert.ToInt32(mColor.B));
+        double mult = ((maxMult - minMult) * (bColor / 255)) + minMult;
 
-        int randIndex = (int) Math.Floor(ran.NextDouble() * activePoints.Count);
-        int pointBadCount = 0;
+        Point3d pointTemp = NextGaussianSphericalAnnulusXY(ran, activePoints[randIndex], minPoint.Z, radi * mult, 1)[0];
 
-        for(int t = 0; t < k; t++)
+        ////Get Raycasted Points
+        List<Point3d> pointTempList = InfiniteRayCast(meshInput, pointTemp, Vector3d.ZAxis);
+        ptest.Add(pointTemp);
+
+        for(int q = 0; q < pointTempList.Count; q++)
         {
-          ////Get Mesh Color for Point Gen
-          MeshPoint mPTemp = meshInput.ClosestMeshPoint(activePoints[randIndex], 0.0);
-          Color mColor = meshInput.ColorAt(mPTemp);
-          double bColor = Convert.ToDouble(Convert.ToInt32(mColor.B));
-          double mult = ((maxMult - minMult) * (bColor / 255)) + minMult;
+          ////Get Mesh Color for Comparision
+          MeshPoint mPTempComp = meshInput.ClosestMeshPoint(pointTempList[q], 0.0);
+          Color mColorComp = meshInput.ColorAt(mPTempComp);
+          double bColorComp = Convert.ToDouble(Convert.ToInt32(mColorComp.B));
+          double multComp = ((maxMult - minMult) * (bColorComp / 255)) + minMult;
 
-          Point3d pointTemp = NextGaussianSphericalAnnulusXY(ran, activePoints[randIndex], minPoint.Z, radi * mult, 1)[0];
-
-          ////Get Raycasted Points
-          List<Point3d> pointTempList = InfiniteRayCast(meshInput, pointTemp, Vector3d.ZAxis);
-          ptest.Add(pointTemp);
-
-          for(int q = 0; q < pointTempList.Count; q++)
+          if((pointTempList[q].X < recXY.Center.X - recXY.Width / 2)
+            || (pointTempList[q].X > recXY.Center.X + recXY.Width / 2)
+            || (pointTempList[q].Y < recXY.Center.Y - recXY.Height / 2)
+            || (pointTempList[q].Y > recXY.Center.Y + recXY.Height / 2))
           {
-            ////Get Mesh Color for Comparision
-            MeshPoint mPTempComp = meshInput.ClosestMeshPoint(pointTempList[q], 0.0);
-            Color mColorComp = meshInput.ColorAt(mPTempComp);
-            double bColorComp = Convert.ToDouble(Convert.ToInt32(mColorComp.B));
-            double multComp = ((maxMult - minMult) * (bColorComp / 255)) + minMult;
+            pointBadCount++;
+          }
+          else
+          {
+            bool distanceInCheckTemp = false;
 
-            if((pointTempList[q].X < recXY.Center.X - recXY.Width / 2)
-              || (pointTempList[q].X > recXY.Center.X + recXY.Width / 2)
-              || (pointTempList[q].Y < recXY.Center.Y - recXY.Height / 2)
-              || (pointTempList[q].Y > recXY.Center.Y + recXY.Height / 2))
+            for(int j = 0; j < allPoints.Count ; j++)
             {
-              pointBadCount++;
+
+              if(allPoints[j].DistanceTo(pointTempList[q]) < radi * multComp)
+              {
+                distanceInCheckTemp = true;
+                break;
+              }
+            }
+
+            if(distanceInCheckTemp == false)
+            {
+              activePoints.Add(pointTempList[q]);
+              allPoints.Add(pointTempList[q]);
             }
             else
             {
-              bool distanceInCheckTemp = false;
-
-              for(int j = 0; j < allPoints.Count ; j++)
-              {
-
-                if(allPoints[j].DistanceTo(pointTempList[q]) < radi * multComp)
-                {
-                  distanceInCheckTemp = true;
-                  break;
-                }
-              }
-
-              if(distanceInCheckTemp == false)
-              {
-                activePoints.Add(pointTempList[q]);
-                allPoints.Add(pointTempList[q]);
-              }
-              else
-              {
-                pointBadCount++;
-              }
+              pointBadCount++;
             }
           }
         }
 
-        if(pointBadCount >= k)
+        if(pointTempList.Count == 0)
         {
-          activePoints.RemoveAt(randIndex);
+          pointBadCount++;
         }
       }
 
+      if(pointBadCount >= k)
+      {
+        activePoints.RemoveAt(randIndex);
+      }
     }
 
     pOut = allPoints;
@@ -226,86 +283,80 @@ private void RunScript(double radi, Mesh meshIn, double radi_Max_0t1, double rad
     Ray3d rayIni = new Ray3d(meshInput.Vertices.Point3dAt(randIndexMeshV), Vector3d.ZAxis);
     double parmIni = Rhino.Geometry.Intersect.Intersection.MeshRay(meshInput, rayIni);
 
-    //activePoints.Add(rayIni.PointAt(parmIni));
-    //allPoints.Add(rayIni.PointAt(parmIni));
-
     activePoints.Add(meshInput.Vertices.Point3dAt(randIndexMeshV));
-    allPoints.Add(meshInput.Vertices.Point3dAt(randIndexMeshV));
+    //allPoints.Add(meshInput.Vertices.Point3dAt(randIndexMeshV));
 
-    int iterTemp = 0;
-
-    while(activePoints.Count > 0 && iterTemp < 5000)
+    while(activePoints.Count > 0)
     {
-      iterTemp++;
 
+      int randIndex = (int) Math.Floor(ran.NextDouble() * activePoints.Count);
+      int pointBadCount = 0;
 
-      if( activePoints.Count > 0)
+      for(int t = 0; t < k; t++)
       {
+        ////Get Mesh Color for Point Gen
+        MeshPoint mPTemp = meshInput.ClosestMeshPoint(activePoints[randIndex], 0.0);
+        Color mColor = meshInput.ColorAt(mPTemp);
+        double bColor = Convert.ToDouble(Convert.ToInt32(mColor.B));
+        double mult = ((maxMult - minMult) * (bColor / 255)) + minMult;
 
-        int randIndex = (int) Math.Floor(ran.NextDouble() * activePoints.Count);
-        int pointBadCount = 0;
+        Point3d pointTemp = NextGaussianSphericalAnnulusYZ(ran, activePoints[randIndex], minPoint.X, radi * mult, 1)[0];
 
-        for(int t = 0; t < k; t++)
+        ////Get Raycasted Points
+        List<Point3d> pointTempList = InfiniteRayCast(meshInput, pointTemp, Vector3d.XAxis);
+        ptest.Add(pointTemp);
+
+        for(int q = 0; q < pointTempList.Count; q++)
         {
-          ////Get Mesh Color for Point Gen
-          MeshPoint mPTemp = meshInput.ClosestMeshPoint(activePoints[randIndex], 0.0);
-          Color mColor = meshInput.ColorAt(mPTemp);
-          double bColor = Convert.ToDouble(Convert.ToInt32(mColor.B));
-          double mult = ((maxMult - minMult) * (bColor / 255)) + minMult;
+          ////Get Mesh Color for Comparision
+          MeshPoint mPTempComp = meshInput.ClosestMeshPoint(pointTempList[q], 0.0);
+          Color mColorComp = meshInput.ColorAt(mPTempComp);
+          double bColorComp = Convert.ToDouble(Convert.ToInt32(mColorComp.B));
+          double multComp = ((maxMult - minMult) * (bColorComp / 255)) + minMult;
 
-          Point3d pointTemp = NextGaussianSphericalAnnulusYZ(ran, activePoints[randIndex], minPoint.X, radi * mult, 1)[0];
 
-          ////Get Raycasted Points
-          List<Point3d> pointTempList = InfiniteRayCast(meshInput, pointTemp, Vector3d.XAxis);
-          ptest.Add(pointTemp);
-
-          for(int q = 0; q < pointTempList.Count; q++)
+          if((pointTempList[q].Y < recYZ.Center.Y - (maxPoint.Y - minPoint.Y) / 2)
+            || (pointTempList[q].Y > recYZ.Center.Y + (maxPoint.Y - minPoint.Y) / 2)
+            || (pointTempList[q].Z < recYZ.Center.Z - (maxPoint.Z - minPoint.Z) / 2)
+            || (pointTempList[q].Z > recYZ.Center.Z + (maxPoint.Z - minPoint.Z) / 2))
           {
-            ////Get Mesh Color for Comparision
-            MeshPoint mPTempComp = meshInput.ClosestMeshPoint(pointTempList[q], 0.0);
-            Color mColorComp = meshInput.ColorAt(mPTempComp);
-            double bColorComp = Convert.ToDouble(Convert.ToInt32(mColorComp.B));
-            double multComp = ((maxMult - minMult) * (bColorComp / 255)) + minMult;
+            pointBadCount++;
+          }
+          else
+          {
+            bool distanceInCheckTemp = false;
 
-
-            if((pointTempList[q].Y < recYZ.Center.Y - (maxPoint.Y - minPoint.Y) / 2)
-              || (pointTempList[q].Y > recYZ.Center.Y + (maxPoint.Y - minPoint.Y) / 2)
-              || (pointTempList[q].Z < recYZ.Center.Z - (maxPoint.Z - minPoint.Z) / 2)
-              || (pointTempList[q].Z > recYZ.Center.Z + (maxPoint.Z - minPoint.Z) / 2))
+            for(int j = 0; j < allPoints.Count ; j++)
             {
-              pointBadCount++;
+
+              if(allPoints[j].DistanceTo(pointTempList[q]) < radi * multComp)
+              {
+                distanceInCheckTemp = true;
+                break;
+              }
+            }
+
+            if(distanceInCheckTemp == false)
+            {
+              activePoints.Add(pointTempList[q]);
+              allPoints.Add(pointTempList[q]);
             }
             else
             {
-              bool distanceInCheckTemp = false;
-
-              for(int j = 0; j < allPoints.Count ; j++)
-              {
-
-                if(allPoints[j].DistanceTo(pointTempList[q]) < radi * multComp)
-                {
-                  distanceInCheckTemp = true;
-                  break;
-                }
-              }
-
-              if(distanceInCheckTemp == false)
-              {
-                activePoints.Add(pointTempList[q]);
-                allPoints.Add(pointTempList[q]);
-              }
-              else
-              {
-                pointBadCount++;
-              }
+              pointBadCount++;
             }
           }
         }
 
-        if(pointBadCount >= k)
+        if(pointTempList.Count == 0)
         {
-          activePoints.RemoveAt(randIndex);
+          pointBadCount++;
         }
+      }
+
+      if(pointBadCount >= k)
+      {
+        activePoints.RemoveAt(randIndex);
       }
 
     }
@@ -346,88 +397,80 @@ private void RunScript(double radi, Mesh meshIn, double radi_Max_0t1, double rad
     Ray3d rayIni = new Ray3d(meshInput.Vertices.Point3dAt(randIndexMeshV), Vector3d.ZAxis);
     double parmIni = Rhino.Geometry.Intersect.Intersection.MeshRay(meshInput, rayIni);
 
-    //activePoints.Add(rayIni.PointAt(parmIni));
-    //allPoints.Add(rayIni.PointAt(parmIni));
-
     activePoints.Add(meshInput.Vertices.Point3dAt(randIndexMeshV));
-    allPoints.Add(meshInput.Vertices.Point3dAt(randIndexMeshV));
+    //allPoints.Add(meshInput.Vertices.Point3dAt(randIndexMeshV));
 
-    int iterTemp = 0;
-
-    while(activePoints.Count > 0 && iterTemp < 5000)
+    while(activePoints.Count > 0)
     {
-      iterTemp++;
+      int randIndex = (int) Math.Floor(ran.NextDouble() * activePoints.Count);
+      int pointBadCount = 0;
 
-
-      if( activePoints.Count > 0)
+      for(int t = 0; t < k; t++)
       {
+        ////Get Mesh Color for Point Gen
+        MeshPoint mPTemp = meshInput.ClosestMeshPoint(activePoints[randIndex], 0.0);
+        Color mColor = meshInput.ColorAt(mPTemp);
+        double bColor = Convert.ToDouble(Convert.ToInt32(mColor.B));
+        double mult = ((maxMult - minMult) * (bColor / 255)) + minMult;
 
-        int randIndex = (int) Math.Floor(ran.NextDouble() * activePoints.Count);
-        int pointBadCount = 0;
+        Point3d pointTemp = NextGaussianSphericalAnnulusXZ(ran, activePoints[randIndex], minPoint.Y, radi * mult, 1)[0];
 
-        for(int t = 0; t < k; t++)
+        ////Get Raycasted Points
+        List<Point3d> pointTempList = InfiniteRayCast(meshInput, pointTemp, Vector3d.YAxis);
+        ptest.Add(pointTemp);
+
+        for(int q = 0; q < pointTempList.Count; q++)
         {
-          ////Get Mesh Color for Point Gen
-          MeshPoint mPTemp = meshInput.ClosestMeshPoint(activePoints[randIndex], 0.0);
-          Color mColor = meshInput.ColorAt(mPTemp);
-          double bColor = Convert.ToDouble(Convert.ToInt32(mColor.B));
-          double mult = ((maxMult - minMult) * (bColor / 255)) + minMult;
+          ////Get Mesh Color for Comparision
+          MeshPoint mPTempComp = meshInput.ClosestMeshPoint(pointTempList[q], 0.0);
+          Color mColorComp = meshInput.ColorAt(mPTempComp);
+          double bColorComp = Convert.ToDouble(Convert.ToInt32(mColorComp.B));
+          double multComp = ((maxMult - minMult) * (bColorComp / 255)) + minMult;
 
-          Point3d pointTemp = NextGaussianSphericalAnnulusXZ(ran, activePoints[randIndex], minPoint.Y, radi * mult, 1)[0];
 
-          ////Get Raycasted Points
-          List<Point3d> pointTempList = InfiniteRayCast(meshInput, pointTemp, Vector3d.YAxis);
-          ptest.Add(pointTemp);
-
-          for(int q = 0; q < pointTempList.Count; q++)
+          if((pointTempList[q].X < recXZ.Center.X - (maxPoint.X - minPoint.X) / 2)
+            || (pointTempList[q].X > recXZ.Center.X + (maxPoint.X - minPoint.X) / 2)
+            || (pointTempList[q].Z < recXZ.Center.Z - (maxPoint.Z - minPoint.Z) / 2)
+            || (pointTempList[q].Z > recXZ.Center.Z + (maxPoint.Z - minPoint.Z) / 2))
           {
-            ////Get Mesh Color for Comparision
-            MeshPoint mPTempComp = meshInput.ClosestMeshPoint(pointTempList[q], 0.0);
-            Color mColorComp = meshInput.ColorAt(mPTempComp);
-            double bColorComp = Convert.ToDouble(Convert.ToInt32(mColorComp.B));
-            double multComp = ((maxMult - minMult) * (bColorComp / 255)) + minMult;
+            pointBadCount++;
+          }
+          else
+          {
+            bool distanceInCheckTemp = false;
 
-
-            if((pointTempList[q].X < recXZ.Center.X - (maxPoint.X - minPoint.X) / 2)
-              || (pointTempList[q].X > recXZ.Center.X + (maxPoint.X - minPoint.X) / 2)
-              || (pointTempList[q].Z < recXZ.Center.Z - (maxPoint.Z - minPoint.Z) / 2)
-              || (pointTempList[q].Z > recXZ.Center.Z + (maxPoint.Z - minPoint.Z) / 2))
+            for(int j = 0; j < allPoints.Count ; j++)
             {
-              pointBadCount++;
+
+              if(allPoints[j].DistanceTo(pointTempList[q]) < radi * multComp)
+              {
+                distanceInCheckTemp = true;
+                break;
+              }
+            }
+
+            if(distanceInCheckTemp == false)
+            {
+              activePoints.Add(pointTempList[q]);
+              allPoints.Add(pointTempList[q]);
             }
             else
             {
-              bool distanceInCheckTemp = false;
-
-              for(int j = 0; j < allPoints.Count ; j++)
-              {
-
-                if(allPoints[j].DistanceTo(pointTempList[q]) < radi * multComp)
-                {
-                  distanceInCheckTemp = true;
-                  break;
-                }
-              }
-
-              if(distanceInCheckTemp == false)
-              {
-                activePoints.Add(pointTempList[q]);
-                allPoints.Add(pointTempList[q]);
-              }
-              else
-              {
-                pointBadCount++;
-              }
+              pointBadCount++;
             }
           }
         }
 
-        if(pointBadCount >= k)
+        if(pointTempList.Count == 0)
         {
-          activePoints.RemoveAt(randIndex);
+          pointBadCount++;
         }
       }
 
+      if(pointBadCount >= k)
+      {
+        activePoints.RemoveAt(randIndex);
+      }
     }
 
     pOut = allPoints;
@@ -569,10 +612,10 @@ private void RunScript(double radi, Mesh meshIn, double radi_Max_0t1, double rad
     double parmReal = 0;
     double parmTemp = 0;
 
-    int iterLimit = 0;
 
-    while(parmReal >= 0 && iterLimit < 100000)
+    while(parmReal >= 0 )
     {
+
       rayIni = new Ray3d(rayIni.PointAt(parmTemp), vecIn);
       parmReal = Rhino.Geometry.Intersect.Intersection.MeshRay(meshIn, rayIni);
       parmTemp = parmReal;
@@ -586,9 +629,9 @@ private void RunScript(double radi, Mesh meshIn, double radi_Max_0t1, double rad
       {
         break;
       }
-
-      iterLimit++;
     }
 
     return castedList;
   }
+  // </Custom additional code> 
+}
