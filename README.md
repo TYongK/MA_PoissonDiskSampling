@@ -11,3 +11,7 @@ Poisson Sampling on a Sphere
 Poisson Sampling on a Poygon
 
 ![image](https://github.com/TYongK/MA_PoissonSampling/assets/93954052/eeebca1e-6d4e-474b-90af-62b266f1411f)
+
+Poisson Sampling Mesh Weighted by Color
+
+![image](https://github.com/TYongK/MA_PoissonSampling/assets/93954052/96a9830d-7696-4871-beb0-7123d683a317)
